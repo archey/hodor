@@ -23,12 +23,15 @@ def on_message(client, userdata, message):
     except:
         pass
 
+# The callback for when a PUBLISH message is sent to the server
+def on_publish(client, userdata, mid):
+    logger.log(logging.DEBUG, "MID: {0}".format(mid))
 
 def setup_logging(v_lvl):
     global logger
-    
+
     level = logging.WARN
-    
+
     if v_lvl == 1:
         level = logging.INFO
     elif v_lvl == 2:
@@ -42,7 +45,7 @@ def setup_logging(v_lvl):
     formatter = logging.Formatter('%(levelname)s - %(message)s')
     fh.setFormatter(formatter)
     logger.addHandler(fh)
-    
+
 
     # Set Logging to Screen
     console = logging.StreamHandler()
@@ -56,28 +59,47 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-H', '--host', dest='tgtHost', required=True, help='specify target host')
-    parser.add_argument('-f', '--filename', dest='tgtfile', default='hodor.log', help='specify file name to write data to') 
-    parser.add_argument('-v', '--verbose', const=1, default=0, type=int, nargs='?', 
-                        help='increase verbosity: 0 = only warnings, 1 = info, 2 = debug. No number means info. Default is no verbosity.') 
-    
+    parser.add_argument('-f', '--filename', dest='tgtfile', default='hodor.log', help='specify file name to write data to')
+    parser.add_argument('-v', '--verbose', const=1, default=0, type=int, nargs='?',
+                        help='increase verbosity: 0 = only warnings, 1 = info, 2 = debug. No number means info. Default is no verbosity.')
+
+    subparsers = parser.add_subparsers(help='commands')
+
+    listen_parser = subparsers.add_parser('listen', help='Listen on Server')
+    listen_parser.set_defaults(command='listen')
+
+    publish_parser = subparsers.add_parser('publish', help='Publish msg to Server')
+    publish_parser.add_argument('-t', '--topic', required=True, help='The topic to publish the message')
+    publish_parser.add_argument('-m', '--msg',  required=True, help='The message being published')
+    publish_parser.set_defaults(command='publish')
+
     options = parser.parse_args()
+
     tgtHost = options.tgtHost
-    tgtfile = options.tgtfile
-    
-    log_file = tgtfile
-    
+    log_file = options.tgtfile
     setup_logging(options.verbose)
 
+    # Setup the client
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
+    client.on_publish = on_publish
+
     try:
         client.connect(tgtHost, 1883, 60)
-        client.loop_forever()
-    except KeyboardInterrupt:
-        client.disconnect()
-        print("[+] Interrupt recieved, closing request to %s" % tgtHost)
+    except:
+        print('[-] Failed to connect to host')
+        exit(1)
+
+    if options.command == 'publish':
+        client.publish(options.topic, payload=options.msg, retain=True)
+    else:
+        try:
+            client.loop_forever()
+        except KeyboardInterrupt:
+            print("[+] Interrupt recieved, closing request to %s" % tgtHost)
+
+    client.disconnect()
 
 if __name__ =='__main__':
         main()
-
